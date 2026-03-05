@@ -11,6 +11,8 @@ export const STORAGE_KEYS = {
   KPIS: 'kpi_kpis',
   RATINGS: 'kpi_ratings',
   REVIEW_CYCLES: 'kpi_review_cycles',
+  NOTIFICATIONS: 'kpi_notifications',
+  COMMENTS: 'kpi_comments',
   SEEDED: 'kpi_seeded',
 };
 

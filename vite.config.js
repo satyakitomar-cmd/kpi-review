@@ -4,5 +4,5 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/kpi-review/',
+  base: process.env.GITHUB_PAGES ? '/kpi-review/' : '/',
 })

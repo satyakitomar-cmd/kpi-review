@@ -194,6 +194,48 @@ export function createReviewCycle(cycleData) {
   return cycle;
 }
 
+// Notifications
+export function getNotifications(targetUserId) {
+  const all = getCollection(STORAGE_KEYS.NOTIFICATIONS);
+  return all.filter((n) => n.targetUserId === targetUserId).sort((a, b) => b.timestamp - a.timestamp);
+}
+
+export function addNotification(data) {
+  const notifications = getCollection(STORAGE_KEYS.NOTIFICATIONS);
+  notifications.push({
+    ...data,
+    id: generateId(),
+    timestamp: Date.now(),
+    read: false,
+  });
+  saveCollection(STORAGE_KEYS.NOTIFICATIONS, notifications);
+}
+
+export function markNotificationRead(id) {
+  const notifications = getCollection(STORAGE_KEYS.NOTIFICATIONS);
+  const n = notifications.find((n) => n.id === id);
+  if (n) n.read = true;
+  saveCollection(STORAGE_KEYS.NOTIFICATIONS, notifications);
+}
+
+// Comments
+export function getComments(employeeId, reviewCycleId) {
+  const all = getCollection(STORAGE_KEYS.COMMENTS);
+  return all
+    .filter((c) => c.employeeId === employeeId && c.reviewCycleId === reviewCycleId)
+    .sort((a, b) => a.timestamp - b.timestamp);
+}
+
+export function addComment(data) {
+  const comments = getCollection(STORAGE_KEYS.COMMENTS);
+  comments.push({
+    ...data,
+    id: generateId(),
+    timestamp: Date.now(),
+  });
+  saveCollection(STORAGE_KEYS.COMMENTS, comments);
+}
+
 // Seeded check
 export function isSeeded() {
   return localStorage.getItem(STORAGE_KEYS.SEEDED) === 'true';

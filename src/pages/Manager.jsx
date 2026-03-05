@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
-import { getUsersByManager, getKpisByEmployee, getRatingsByEmployee, getRatings, saveRatings, getActiveReviewCycle } from '../lib/storage';
+import { getUsersByManager, getKpisByEmployee, getRatingsByEmployee, getRatings, saveRatings, getActiveReviewCycle, getNotifications, markNotificationRead, getComments, addComment, addNotification } from '../lib/storage';
 import { calculateContribution, calculateTotalScore, getPerformanceCategory, calculateDifference, getDifferenceHighlight, getScoreBgClass, getEmployeeStatus, calculateTeamAverage } from '../lib/calculations';
-import { RATING_MIN, RATING_MAX } from '../lib/constants';
+import RatingInput from '../components/RatingInput';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export default function Manager() {
@@ -15,6 +15,8 @@ export default function Manager() {
   const [managerRatings, setManagerRatings] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     const activeCycle = getActiveReviewCycle();
@@ -23,8 +25,11 @@ export default function Manager() {
       const reports = getUsersByManager(user.id);
       setEmployees(reports);
     }
+    setNotifications(getNotifications(user.id));
     setLoading(false);
   }, [user.id, refreshKey]);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   const teamData = useMemo(() => {
     if (!cycle || employees.length === 0) return [];
@@ -70,8 +75,8 @@ export default function Manager() {
   const handleSubmitRatings = () => {
     for (const kpi of selectedEmp.kpis) {
       const val = managerRatings[kpi.id];
-      if (!val || val < RATING_MIN || val > RATING_MAX) {
-        addToast(`Please rate all KPIs (${RATING_MIN}-${RATING_MAX})`, 'error');
+      if (!val || val < 1 || val > 5) {
+        addToast('Please rate all KPIs (1-5)', 'error');
         return;
       }
     }
@@ -86,9 +91,24 @@ export default function Manager() {
       }
     });
     saveRatings(allRatings);
+    addNotification({
+      targetUserId: selectedEmp.id,
+      fromUserId: user.id,
+      fromUserName: user.name,
+      type: 'manager_rating_submitted',
+      message: `${user.name} has completed your performance review for ${cycle.label}`,
+      reviewCycleId: cycle.id,
+    });
     addToast('Manager ratings submitted successfully');
     setSelectedEmp(null);
     setRefreshKey((k) => k + 1);
+  };
+
+  const handleMarkAllRead = () => {
+    notifications.forEach((n) => {
+      if (!n.read) markNotificationRead(n.id);
+    });
+    setNotifications(getNotifications(user.id));
   };
 
   if (loading) {
@@ -105,10 +125,51 @@ export default function Manager() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Team Reviews</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{cycle.label} &middot; {employees.length} direct reports</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Team Reviews</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{cycle.label} &middot; {employees.length} direct reports</p>
+        </div>
+        <button
+          onClick={() => setShowNotifications(!showNotifications)}
+          className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+          </svg>
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              {unreadCount}
+            </span>
+          )}
+        </button>
       </div>
+
+      {/* Notifications Panel */}
+      {showNotifications && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+            {unreadCount > 0 && (
+              <button onClick={handleMarkAllRead} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                Mark all read
+              </button>
+            )}
+          </div>
+          {notifications.length === 0 ? (
+            <div className="p-5 text-center text-sm text-gray-400">No notifications</div>
+          ) : (
+            <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+              {notifications.map((n) => (
+                <div key={n.id} className={`px-5 py-3 text-sm ${n.read ? 'bg-white' : 'bg-indigo-50'}`}>
+                  <p className={`${n.read ? 'text-gray-600' : 'text-gray-900 font-medium'}`}>{n.message}</p>
+                  <p className="text-xs text-gray-400 mt-1">{new Date(n.timestamp).toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Team Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -205,17 +266,42 @@ export default function Manager() {
           setManagerRatings={setManagerRatings}
           onSubmit={handleSubmitRatings}
           onClose={() => setSelectedEmp(null)}
+          currentUser={user}
+          cycle={cycle}
         />
       )}
     </div>
   );
 }
 
-function RatingPanel({ employee, managerRatings, setManagerRatings, onSubmit, onClose }) {
+function RatingPanel({ employee, managerRatings, setManagerRatings, onSubmit, onClose, currentUser, cycle }) {
+  const { addToast } = useToast();
   const ratingMap = {};
   employee.ratings.forEach((r) => { ratingMap[r.kpiId] = r; });
   const alreadySubmitted = employee.ratings.length > 0 && employee.ratings.every((r) => r.submittedByManager);
   const employeeSubmitted = employee.ratings.length > 0 && employee.ratings.every((r) => r.submittedByEmployee);
+
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
+
+  useEffect(() => {
+    setComments(getComments(employee.id, cycle.id));
+  }, [employee.id, cycle.id]);
+
+  const handleAddComment = () => {
+    if (!newComment.trim()) return;
+    addComment({
+      employeeId: employee.id,
+      reviewCycleId: cycle.id,
+      authorId: currentUser.id,
+      authorName: currentUser.name,
+      authorRole: currentUser.role,
+      text: newComment.trim(),
+    });
+    setComments(getComments(employee.id, cycle.id));
+    setNewComment('');
+    addToast('Comment added');
+  };
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center">
@@ -269,13 +355,9 @@ function RatingPanel({ employee, managerRatings, setManagerRatings, onSubmit, on
                       {alreadySubmitted ? (
                         <span className="text-gray-700">{rating?.managerRating}</span>
                       ) : (
-                        <input
-                          type="number"
-                          min={RATING_MIN}
-                          max={RATING_MAX}
+                        <RatingInput
                           value={mgrVal}
-                          onChange={(e) => setManagerRatings((prev) => ({ ...prev, [kpi.id]: e.target.value }))}
-                          className="w-16 text-center border border-gray-300 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                          onChange={(val) => setManagerRatings((prev) => ({ ...prev, [kpi.id]: val }))}
                         />
                       )}
                     </td>
@@ -310,6 +392,44 @@ function RatingPanel({ employee, managerRatings, setManagerRatings, onSubmit, on
             </button>
           </div>
         )}
+
+        {/* Comments Section */}
+        <div className="border-t border-gray-100 p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Comments</h3>
+          {comments.length === 0 && (
+            <p className="text-xs text-gray-400 mb-3">No comments yet. Add a note about this review.</p>
+          )}
+          <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">
+            {comments.map((c) => (
+              <div key={c.id} className="bg-gray-50 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-gray-900">{c.authorName}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                    c.authorRole === 'CEO' ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'
+                  }`}>{c.authorRole}</span>
+                  <span className="text-[10px] text-gray-400">{new Date(c.timestamp).toLocaleString()}</span>
+                </div>
+                <p className="text-sm text-gray-700">{c.text}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
+              placeholder="Add a comment..."
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            />
+            <button
+              onClick={handleAddComment}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              Send
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

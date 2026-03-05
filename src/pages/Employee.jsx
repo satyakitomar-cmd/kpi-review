@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
-import { getKpisByEmployee, getRatingsByEmployee, saveRatings, getRatings, getActiveReviewCycle } from '../lib/storage';
+import { getKpisByEmployee, getRatingsByEmployee, saveRatings, getRatings, getActiveReviewCycle, addNotification } from '../lib/storage';
 import { calculateContribution, calculateTotalScore, getPerformanceCategory, calculateDifference, getDifferenceHighlight, getScoreBgClass } from '../lib/calculations';
 import { RATING_MIN, RATING_MAX } from '../lib/constants';
+import RatingInput from '../components/RatingInput';
 
 export default function Employee() {
   const { user } = useAuth();
@@ -78,6 +79,14 @@ export default function Employee() {
     saveRatings(allRatings);
     setRatings(getRatingsByEmployee(user.id, cycle.id));
     setSubmitted(true);
+    addNotification({
+      targetUserId: user.managerId,
+      fromUserId: user.id,
+      fromUserName: user.name,
+      type: 'self_rating_submitted',
+      message: `${user.name} has submitted their self-ratings for ${cycle.label}`,
+      reviewCycleId: cycle.id,
+    });
     addToast('Self-ratings submitted successfully');
   };
 
@@ -171,13 +180,9 @@ export default function Employee() {
                       {submitted ? (
                         <span className="text-gray-700">{selfRatings[kpi.id]}</span>
                       ) : (
-                        <input
-                          type="number"
-                          min={RATING_MIN}
-                          max={RATING_MAX}
+                        <RatingInput
                           value={selfRatings[kpi.id]}
-                          onChange={(e) => setSelfRatings((prev) => ({ ...prev, [kpi.id]: e.target.value }))}
-                          className="w-16 text-center border border-gray-300 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                          onChange={(val) => setSelfRatings((prev) => ({ ...prev, [kpi.id]: val }))}
                         />
                       )}
                     </td>
